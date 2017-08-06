@@ -23,7 +23,7 @@ The following file shows those abilities in practice are available
 			fmt.Printf("%s, %d\n", module.Name(), module.Size())
 		}
 
-		// Finds a specific module and display dome informations about it
+		// Finds a specific module and display some informations about it
 		pcspkr := km.ModuleFromName("pcspkr")
 		infoMod := pcspkr.Info()
 		fmt.Printf("Author: %s\n", infoMod["author"])
