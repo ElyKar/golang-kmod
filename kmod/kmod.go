@@ -16,25 +16,39 @@ The following file shows those abilities in practice are available
 	)
 
 	func main() {
-		km := kmod.NewKmod()
+		km, err := kmod.NewKmod()
+
+		if err != nil {
+			panic(err)
+		}
 
 		// List all loaded modules
-		for _, module := range km.List() {
+		list, err := km.List()
+		if err != nil {
+			panic(err)
+		}
+
+		for _, module := range list {
 			fmt.Printf("%s, %d\n", module.Name(), module.Size())
 		}
 
 		// Finds a specific module and display some informations about it
-		pcspkr := km.ModuleFromName("pcspkr")
-		infoMod := pcspkr.Info()
-		fmt.Printf("Author: %s\n", infoMod["author"])
-		fmt.Printf("Description: %s\n", infoMod["description"])
-		fmt.Printf("License: %s\n", infoMod["license"])
+		if pcspkr, err := km.ModuleFromName("pcspkr"); err == nil {
+			infoMod, err := pcspkr.Info()
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Printf("Author: %s\n", infoMod["author"])
+			fmt.Printf("Description: %s\n", infoMod["description"])
+			fmt.Printf("License: %s\n", infoMod["license"])
+		}
 
 		// Insert a module and its dependencies
-		km.Insert("rtl2832")
+		_ = km.Insert("rtl2832")
 
-		// Remove a module and its dependencies if possible
-		km.Remove("rtl2832")
+		// Remove a module
+		_ = km.Remove("rtl2832")
 	}
 */
 package kmod
