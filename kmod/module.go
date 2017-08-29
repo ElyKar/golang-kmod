@@ -123,15 +123,16 @@ func (mod *Module) RemoveCommands() string {
 
 // Info returns the informations about a module (author, description etc ...).
 //
-// It is susceptible to panic if informations about the module couldn't be read
-func (mod *Module) Info() map[string]string {
+// This method returns an error if informations about the module couldn't be read
+func (mod *Module) Info() (map[string]string, error) {
 	var list, listCurr *C.struct_kmod_list
 	var key, value string
 	info := make(map[string]string)
 	err := C.kmod_module_get_info(mod.mod, &list)
 
 	if err < 0 {
-		panic(fmt.Sprintf("Kmod : unable to get the module information: %s", goStrerror(-err)))
+		// If there is an error, libkmod already frees the kmod_list
+		return info, fmt.Errorf("Kmod : unable to get the module information: %s", goStrerror(-err))
 	}
 
 	for listCurr = list; listCurr != nil; listCurr = C.kmod_list_next(list, listCurr) {
@@ -141,13 +142,13 @@ func (mod *Module) Info() map[string]string {
 	}
 
 	C.kmod_module_info_free_list(list)
-	return info
+	return info, nil
 }
 
 // Versions returns the list of exported symbols for a module.
 //
-// This method can panic if they could not be retrieved.
-func (mod *Module) Versions() []*Version {
+// This method returns an error if the versions could not be retrieved
+func (mod *Module) Versions() ([]*Version, error) {
 	var list, listCurr *C.struct_kmod_list
 	var symbol string
 	var crc uint64
@@ -155,7 +156,8 @@ func (mod *Module) Versions() []*Version {
 	err := C.kmod_module_get_versions(mod.mod, &list)
 
 	if err < 0 {
-		panic(fmt.Sprintf("Kmod : unable to get the module versions: %s", goStrerror(-err)))
+		// If there is an error, libkmod already frees the kmod_list
+		return versions, fmt.Errorf("Kmod : unable to get the module versions: %s", goStrerror(-err))
 	}
 
 	for listCurr = list; listCurr != nil; listCurr = C.kmod_list_next(list, listCurr) {
@@ -165,5 +167,5 @@ func (mod *Module) Versions() []*Version {
 	}
 
 	C.kmod_module_versions_free_list(list)
-	return versions
+	return versions, nil
 }

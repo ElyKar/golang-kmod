@@ -68,25 +68,25 @@ type Kmod struct {
 
 // NewKmod creates a new context from default directories and configuration files. It will search for modules in /lib/modules/`uname -r` and configuration files in /run/modprobe.d, /etc/modprobe.d and /lib/modprobe.d.
 //
-// This function can panic in case the library encounters a problem for creating and populating the context.
+// This function returns an error in case the library encounters a problem for creating and populating the context.
 //
 // The returned *Kmod must not be discarded, as releasing it will free the underlying C structure and all the modules in the context.
-func NewKmod() *Kmod {
+func NewKmod() (*Kmod, error) {
 	var ctx *C.struct_kmod_ctx
 
 	ctx = C.kmod_new(nil, nil)
 	if ctx == nil {
-		panic("Kmod: unable to create the kmod_ctx, leaving now")
+		return nil, fmt.Errorf("Kmod: unable to create the kmod_ctx, leaving now")
 	}
 
 	if err := C.kmod_load_resources(ctx); err < 0 {
-		panic(fmt.Sprintf("Kmod: unable to prepare the kmod_ctx, leaving now - %s", goStrerror(-err)))
+		return nil, fmt.Errorf("Kmod: unable to prepare the kmod_ctx, leaving now - %s", goStrerror(-err))
 	}
 
 	ret := &Kmod{ctx}
 
 	runtime.SetFinalizer(ret, (*Kmod).cleanup)
-	return ret
+	return ret, nil
 }
 
 // Cleanup the kmod context.
@@ -100,23 +100,23 @@ func (kmod *Kmod) cleanup() {
 
 // List returns a slice containing all loaded modules.
 //
-// The method can panic in case the list can't be retrieved.
-func (kmod *Kmod) List() []*Module {
+// The method returns an error in case the list can't be retrieved.
+func (kmod *Kmod) List() ([]*Module, error) {
 	var list *C.struct_kmod_list
 	var err C.int
 	err = C.kmod_module_new_from_loaded(kmod.ctx, &list)
 	if err < 0 {
-		panic(fmt.Sprintf("Kmod: couldn't get the list of modules: %s\n", goStrerror(-err)))
+		return nil, fmt.Errorf("Kmod: couldn't get the list of modules: %s\n", goStrerror(-err))
 	}
 
 	modList := newModuleList(list)
-	return modList.modules
+	return modList.modules, nil
 }
 
 // Lookup returns a slice of all modules matching 'alias_name'.
 //
-// The method can panic in case the lookup fails
-func (kmod *Kmod) Lookup(aliasName string) []*Module {
+// The method returns an error in case the lookup fails
+func (kmod *Kmod) Lookup(aliasName string) ([]*Module, error) {
 	var list *C.struct_kmod_list
 	var err C.int
 
@@ -125,31 +125,31 @@ func (kmod *Kmod) Lookup(aliasName string) []*Module {
 	err = C.kmod_module_new_from_lookup(kmod.ctx, cAliasName, &list)
 	C.free(unsafe.Pointer(cAliasName))
 	if err < 0 {
-		panic(fmt.Sprintf("Kmod : Failed to lookup %s - %s", aliasName, goStrerror(-err)))
+		return nil, fmt.Errorf("Kmod : Failed to lookup %s - %s", aliasName, goStrerror(-err))
 	}
 
 	modList := newModuleList(list)
-	return modList.modules
+	return modList.modules, nil
 }
 
 // ModuleFromName returns a module handle from its name.
 //
-// The method panics if the module could not be found.
-func (kmod *Kmod) ModuleFromName(name string) *Module {
+// The method returns an error if the module could not be found.
+func (kmod *Kmod) ModuleFromName(name string) (*Module, error) {
 	var module *C.struct_kmod_module
 	cName := C.CString(name)
 	err := C.kmod_module_new_from_name(kmod.ctx, cName, &module)
 	C.free(unsafe.Pointer(cName))
 	if err < 0 {
-		panic(fmt.Sprintf("Kmod : Could not get module %s - %s", name, goStrerror(-err)))
+		return nil, fmt.Errorf("Kmod : Could not get module %s - %s", name, goStrerror(-err))
 	}
 
-	return newModule(module)
+	return newModule(module), nil
 }
 
 // Insert a module in the tree with its name.
 //
-// It panics if the module could not be found or if it could not be inserted.
+// It returns an error if the module could not be found or if it could not be inserted.
 //
 // To insert a wanted module:
 //
@@ -157,34 +157,46 @@ func (kmod *Kmod) ModuleFromName(name string) *Module {
 //     kmod.Insert("pcspkr")
 //
 // If this module depends on others that are not yet loaded, depencies will be loaded.
-func (kmod *Kmod) Insert(name string) {
-	modules := kmod.Lookup(name)
-	var err C.int
+func (kmod *Kmod) Insert(name string) error {
+	var errCode C.int
+	modules, err := kmod.Lookup(name)
+
+	if err != nil {
+		return err
+	}
 
 	for _, module := range modules {
-		err = C.kmod_module_probe_insert_module(module.mod, 0, nil, nil, nil, nil)
-		if err < 0 {
-			panic(fmt.Sprintf("Could not insert module %s : %s", module.Name(), goStrerror(-err)))
+		errCode = C.kmod_module_probe_insert_module(module.mod, 0, nil, nil, nil, nil)
+		if errCode < 0 {
+			return fmt.Errorf("Could not insert module %s : %s", module.Name(), goStrerror(-errCode))
 		}
 	}
+
+	return nil
 }
 
 // Remove a module from the current tree using its name.
 //
-// It can panic if the module could not be found or could not be removed.
+// It returns an error if the module could not be found or could not be removed.
 //
 // Provided the module pcspkr is loaded and not used:
 //
 //     kmod := NewKmod()
 //     kmod.Remove("pcspkr")
-func (kmod *Kmod) Remove(name string) {
-	modules := kmod.Lookup(name)
-	var err C.int
+func (kmod *Kmod) Remove(name string) error {
+	var errCode C.int
+	modules, err := kmod.Lookup(name)
+
+	if err != nil {
+		return err
+	}
 
 	for _, module := range modules {
-		err = C.kmod_module_remove_module(module.mod, 0)
-		if err < 0 {
-			panic(fmt.Sprintf("Could not remove module %s : %s", module.Name(), goStrerror(-err)))
+		errCode = C.kmod_module_remove_module(module.mod, 0)
+		if errCode < 0 {
+			return fmt.Errorf("Could not remove module %s : %s", module.Name(), goStrerror(-errCode))
 		}
 	}
+
+	return nil
 }
