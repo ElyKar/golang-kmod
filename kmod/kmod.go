@@ -61,7 +61,7 @@ func goStrerror(err C.int) string {
 	return C.GoString(msg)
 }
 
-// Wraps a kmod_context inside it. When garbage collected, all module handles will be freed by libkmod.
+// Kmod wraps a kmod_context inside it. When garbage collected, all module handles will be freed by libkmod.
 type Kmod struct {
 	ctx *C.struct_kmod_ctx
 }
