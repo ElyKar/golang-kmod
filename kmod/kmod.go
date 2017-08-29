@@ -40,7 +40,7 @@ The following file shows those abilities in practice are available
 package kmod
 
 /*
-#cgo LDFLAGS: -L/usr/lib -lkmod -I/usr/include
+#cgo LDFLAGS: -lkmod
 #include <libkmod.h>
 #include <string.h>
 #include <stdio.h>
